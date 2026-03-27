@@ -1,18 +1,20 @@
 # AST Bot
 
-`AST Bot` is a MAX bot for navigating production cases in power engineering. The current version is no longer a procurement search bot: it uses a new `case_*` domain layer, stores cases in SQLite, and works as a pilot assistant for finding a relevant case, opening its card, and walking through steps.
+`AST Bot` — бот для MAX, который помогает находить производственные кейсы в электроэнергетике, открывать карточку кейса и проходить шаги внутри диалога.
 
-## What Works Now
+Текущая версия проекта использует новый доменный слой `case_*`, локальную SQLite-базу и стартовые кейсы для пилота.
 
-- `/start` and `/help`
-- main menu in MAX
-- free-text search through seeded cases
-- "Popular cases" section
-- case card with key details
-- basic step-by-step walkthrough
-- local SQLite catalog with seeded cases and steps
+## Что уже работает
 
-Legacy procurement files are still in the repository for reference, but the active bot flow now lives in:
+- `/start` и `/help`
+- главное меню в MAX
+- поиск по свободному тексту
+- раздел «Популярные кейсы»
+- карточка кейса
+- базовое пошаговое прохождение
+- локальный каталог кейсов и шагов в SQLite
+
+Старые файлы про закупки оставлены в репозитории как legacy-контур, но активный сценарий бота сейчас живет в:
 
 - `bot.py`
 - `case_models.py`
@@ -22,97 +24,122 @@ Legacy procurement files are still in the repository for reference, but the acti
 - `case_formatters.py`
 - `case_handlers.py`
 
-## Local Setup
+## Быстрый запуск
 
-### 1. Install Python and dependencies
-
-The project is currently configured for Windows and was tested with the local interpreter path used in `run_bot.ps1`.
+### 1. Клонировать репозиторий
 
 ```powershell
-cd c:\Users\ivmih\OneDrive\Desktop\zakupki-bot-main
-pip install -r requirements.txt
+git clone https://github.com/ivmihailov/astbot.git
+cd astbot
 ```
 
-If `pip` resolves to the wrong interpreter on your machine, use your exact Python executable instead:
+### 2. Создать виртуальное окружение
+
+Если у вас установлен `py`:
 
 ```powershell
-& 'C:\Users\ivmih\AppData\Local\Python\pythoncore-3.14-64\python.exe' -m pip install -r requirements.txt
+py -3 -m venv .venv
 ```
 
-### 2. Create `.env`
+Если `py` недоступен, можно использовать `python`:
 
-Copy `.env.example` to `.env` and fill in at least the MAX token:
+```powershell
+python -m venv .venv
+```
+
+### 3. Активировать окружение
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Если PowerShell блокирует выполнение скриптов:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+### 4. Установить зависимости
+
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+### 5. Создать `.env`
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Required now:
+Минимально нужен только:
 
 - `MAX_BOT_TOKEN`
 
-Optional for later GigaChat integration:
+Опционально, для следующего этапа интеграции с GigaChat:
 
 - `GIGACHAT_CREDENTIALS`
 - `GIGACHAT_SCOPE`
 - `GIGACHAT_PARSE_MODEL`
 - `GIGACHAT_ANSWER_MODEL`
 
-Defaults already work for local pilot storage:
+По умолчанию уже подходят:
 
 - `SQLITE_PATH=data/cases.db`
 - `MEDIA_DIR=storage/photos`
 
-## Running the Bot
+## Запуск
 
-### Recommended: run in the current PowerShell window
+### Основной способ
 
 ```powershell
-cd c:\Users\ivmih\OneDrive\Desktop\zakupki-bot-main
 powershell -ExecutionPolicy Bypass -File .\run_bot.ps1
 ```
 
-This is the most reliable option on this machine.
+Скрипт сам пытается найти Python в таком порядке:
 
-### Alternative: start in a separate window
+1. `.venv\Scripts\python.exe`
+2. `py -3`
+3. системный `python.exe`
+
+### Запуск в отдельном окне
 
 ```powershell
-cd c:\Users\ivmih\OneDrive\Desktop\zakupki-bot-main
 .\start_bot.cmd
 ```
 
-### Status and stop
+### Проверка статуса и остановка
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\status_bot.ps1
 powershell -ExecutionPolicy Bypass -File .\stop_bot.ps1
 ```
 
-## Data and Logs
+## Данные и логи
 
-- SQLite database: `data/cases.db`
-- Rolling log file: `logs/bot.log`
-- runtime stdout/stderr: `logs/runtime.out`, `logs/runtime.err`
+- база данных: `data/cases.db`
+- основной лог: `logs/bot.log`
+- stdout/stderr процесса: `logs/runtime.out`, `logs/runtime.err`
 
-The SQLite catalog is initialized automatically on startup. Seed cases are inserted by the repository layer if the database is empty.
+Каталог кейсов и шагов инициализируется автоматически при первом запуске.
 
-## Quick Smoke Test
+## Быстрая проверка
 
-After launch, open the bot in MAX and try:
+После старта откройте бота в MAX и попробуйте:
 
 1. `/start`
 2. `Популярные кейсы`
 3. `Найти кейс`
-4. A query such as `траншея заливается водой`
+4. запрос `траншея заливается водой`
 
-## Project Notes
+## Текущее состояние проекта
 
-- The rebuild audit and staged migration plan are in `docs/pilot_rebuild_plan.md`.
-- Photo upload, persistent run history, analytics, and GigaChat query normalization are the next planned steps.
-- `.env`, logs, and local SQLite files are intentionally ignored by git.
+- аудит и план перестройки: `docs/pilot_rebuild_plan.md`
+- фото, постоянная история прохождения, аналитика и нормализация запроса через GigaChat — следующие этапы
+- `.env`, логи и локальная SQLite-база не коммитятся в git
 
-## License
+## Лицензия
 
-This repository is released under `PolyForm Noncommercial 1.0.0`.
+Проект распространяется под `PolyForm Noncommercial 1.0.0`.
 
-That means the code can be used for noncommercial purposes under the license terms, but commercial use is not permitted without separate permission from the copyright holder.
+Это означает, что использовать код в некоммерческих целях можно по условиям лицензии, а коммерческое использование требует отдельного согласования с правообладателем.

@@ -1,17 +1,52 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$pythonPath = "C:\Users\ivmih\AppData\Local\Python\pythoncore-3.14-64\python.exe"
 $logDir = Join-Path $projectRoot "logs"
 $pidFile = Join-Path $logDir "bot.pid"
 $stdoutFile = Join-Path $logDir "runtime.out"
 $stderrFile = Join-Path $logDir "runtime.err"
 
-New-Item -ItemType Directory -Force $logDir | Out-Null
+function Get-PythonCommand {
+    param(
+        [string]$ProjectRoot,
+        [string]$ScriptName
+    )
 
-if (-not (Test-Path $pythonPath)) {
-    throw "Python not found at $pythonPath"
+    $venvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+    if (Test-Path $venvPython) {
+        return @{
+            FilePath = $venvPython
+            Arguments = @($ScriptName)
+            Description = $venvPython
+        }
+    }
+
+    $pyCommand = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyCommand -and $pyCommand.Source) {
+        return @{
+            FilePath = $pyCommand.Source
+            Arguments = @("-3", $ScriptName)
+            Description = "$($pyCommand.Source) -3"
+        }
+    }
+
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    if (
+        $pythonCommand -and
+        $pythonCommand.Source -and
+        $pythonCommand.Source -notmatch "WindowsApps\\python(.exe)?$"
+    ) {
+        return @{
+            FilePath = $pythonCommand.Source
+            Arguments = @($ScriptName)
+            Description = $pythonCommand.Source
+        }
+    }
+
+    throw "Python не найден. Установите Python 3.11+ или создайте .venv в корне проекта."
 }
+
+New-Item -ItemType Directory -Force $logDir | Out-Null
 
 if (Test-Path $pidFile) {
     $existingPid = Get-Content $pidFile -ErrorAction SilentlyContinue
@@ -24,9 +59,11 @@ if (Test-Path $pidFile) {
     }
 }
 
+$python = Get-PythonCommand -ProjectRoot $projectRoot -ScriptName "bot.py"
+
 $process = Start-Process `
-    -FilePath $pythonPath `
-    -ArgumentList "bot.py" `
+    -FilePath $python.FilePath `
+    -ArgumentList $python.Arguments `
     -WorkingDirectory $projectRoot `
     -RedirectStandardOutput $stdoutFile `
     -RedirectStandardError $stderrFile `
@@ -44,6 +81,7 @@ if (-not $runningProcess) {
 }
 
 Write-Host "Bot started successfully. PID: $($process.Id)"
+Write-Host "Using Python: $($python.Description)"
 Write-Host "Logs:"
 Write-Host "  $stdoutFile"
 Write-Host "  $stderrFile"
