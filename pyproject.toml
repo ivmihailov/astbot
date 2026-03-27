@@ -1,0 +1,20 @@
+[project]
+name = "astbot"
+version = "0.1.0"
+description = "MAX bot for production case navigation in power engineering"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "aiohttp>=3.9,<4",
+    "gigachat>=0.1.0",
+    "maxapi>=0.9,<1",
+    "pydantic>=2.0,<3",
+    "python-dotenv>=1.0,<2",
+]
+
+[project.scripts]
+astbot = "bot:main"
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
