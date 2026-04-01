@@ -1,9 +1,6 @@
 services:
   astbot:
     image: astbot:0.1.0
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: astbot
     restart: unless-stopped
     init: true

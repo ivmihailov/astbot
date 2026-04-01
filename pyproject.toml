@@ -15,6 +15,24 @@ dependencies = [
 [project.scripts]
 astbot = "bot:main"
 
+[tool.setuptools]
+py-modules = [
+    "bot",
+    "case_formatters",
+    "case_handlers",
+    "case_models",
+    "case_repository",
+    "case_search",
+    "case_state",
+    "config",
+    "formatters",
+    "gigachat_client",
+    "gosplan_api",
+    "handlers",
+    "models",
+    "state",
+]
+
 [build-system]
 requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"

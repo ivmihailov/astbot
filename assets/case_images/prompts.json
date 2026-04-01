@@ -1,0 +1,197 @@
+{
+  "style_guide": {
+    "asset_count_per_case": 2,
+    "visual_direction": "photorealistic documentary construction photography",
+    "shared_constraints": [
+      "realistic power engineering construction site",
+      "natural light or soft overcast daylight",
+      "no text overlays",
+      "no watermarks",
+      "no visible brand logos",
+      "workwear and PPE should look realistic",
+      "image should feel like an incident or production record, not advertising"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "cable-delivery-delay",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary photo of a power engineering construction site where cable delivery is delayed, almost empty material storage area, only a few cable reels left, foreman looking at schedule on a clipboard, idle work zone in the background, realistic Russian utility construction atmosphere, overcast daylight, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 1,
+        "filename": "step-1.png",
+        "prompt": "Photorealistic close documentary shot of a foreman checking remaining cable reels and stock on site, comparing actual material остатки with a printed daily work plan, construction yard, realistic PPE, practical field mood, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "concrete-mismatch",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary photo of a suspicious concrete delivery at a construction site, ready-mix truck near pouring zone, workers stopped, visible concern about wrong concrete grade or missing volume, realistic site conditions, overcast daylight, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 2,
+        "filename": "step-2.png",
+        "prompt": "Photorealistic documentary image of site staff verifying concrete delivery documents and measuring actual volume, clipboard, delivery papers, tape measure, detailed inspection scene near concrete truck, realistic construction quality control, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "stale-docs",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic construction site scene where the crew has no current working drawings, foreman and workers comparing outdated paper drawings near active work front, visible uncertainty, realistic power infrastructure project environment, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 2,
+        "filename": "step-2.png",
+        "prompt": "Photorealistic documentary shot of critical work being paused at a disputed node because current documentation is missing, worker standing near unfinished installation while foreman requests updated drawings, realistic site control moment, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "as-built-mismatch",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary photo of a mismatch between as-built scheme and actual executed work on a power construction site, installed route or structure visibly different from drawing, engineer comparing site condition with printed scheme, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 1,
+        "filename": "step-1.png",
+        "prompt": "Photorealistic field documentation shot of an engineer taking reference photos of actual installation to capture discrepancy points, focus on real construction details and geometry mismatch, realistic technical inspection mood, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "work-without-permit",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary scene of contractors starting work without confirmed permit on a utility construction site, work is active but safety paperwork is missing, foreman noticing violation, realistic PPE and industrial environment, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 1,
+        "filename": "step-1.png",
+        "prompt": "Photorealistic incident-control image of work being immediately stopped because permit is missing, foreman raising hand to halt crew, partial construction setup visible, safety-focused atmosphere, realistic site conditions, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "damaged-equipment",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary photo of delivered equipment with visible transport damage and incomplete packaging at receiving area of a power project site, crates, protective wrapping, damaged corner, realistic incoming inspection scene, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 1,
+        "filename": "step-1.png",
+        "prompt": "Photorealistic close inspection image of incoming control for damaged equipment, worker documenting packaging defects and missing components with camera and checklist, realistic warehouse-on-site setting, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "flooded-trench",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary photo of a flooded trench for cable line installation after heavy rain, water filling the trench, muddy edges, stopped work, realistic power construction site, cloudy daylight, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 2,
+        "filename": "step-2.png",
+        "prompt": "Photorealistic construction site image of water being pumped out of a flooded cable trench, pump hose, muddy ground, workers checking trench bottom condition after drainage, realistic field response, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "acceptance-delay",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary photo of delayed acceptance of completed works, site office or field table with folders, acts and measurement sheets waiting for customer confirmation, tense but realistic project-control mood, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 1,
+        "filename": "step-1.png",
+        "prompt": "Photorealistic image of a complete supporting package for acceptance being prepared: printed acts, photos, volume sheets and a laptop on a construction office desk, realistic project documentation workflow, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "unmapped-utilities",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary construction scene where excavation route intersects unexpected underground utilities, excavator paused, exposed pipe or cable discovered in trench line, high-risk site situation, realistic utility project atmosphere, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 1,
+        "filename": "step-1.png",
+        "prompt": "Photorealistic field photo of work being stopped in a risk zone after discovery of undocumented utilities, visible coordinates or marked location reference, worker documenting exposed communication line, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "missing-crew",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary image of a critical crew missing from a shift at a power construction site, underloaded work zone, empty positions, foreman looking at staffing list and incomplete team, realistic site atmosphere, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 2,
+        "filename": "step-2.png",
+        "prompt": "Photorealistic construction management scene of workers being reassigned to an alternative work front because a critical specialist did not arrive, foreman redirecting crew, realistic utility site, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "financial-model",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary image of a site manager using a project financial model in a temporary site office, laptop screen with charts and cost plan, construction background visible, realistic operational planning atmosphere, no text overlay, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 2,
+        "filename": "step-2.png",
+        "prompt": "Photorealistic meeting scene where plan-vs-fact expenses and closed volumes are compared using a financial dashboard, manager and foreman discussing numbers in a site office, realistic infrastructure project context, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "photo-reports",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary photo of a foreman making a digital photo report directly from a smartphone on a power engineering construction site, clear association with field reporting workflow, realistic PPE, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 1,
+        "filename": "step-1.png",
+        "prompt": "Photorealistic shot of mandatory milestone photos being captured for a key stage of work, close-up on smartphone camera and actual construction element being documented, realistic field report style, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "escalation-scenario",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary image of a structured escalation scenario for a site issue, foreman compiling a short problem summary with photos on a phone or laptop, sense of urgent but organized communication, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 2,
+        "filename": "step-2.png",
+        "prompt": "Photorealistic close scene of a concise escalation package being assembled: one issue photo, brief status summary, current step information on a mobile device or laptop, realistic project control environment, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "hidden-works-checklist",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary image of hidden works control using a structured checklist before closing the stage, visible rebar, conduits or embedded elements, inspection process on a power construction site, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 2,
+        "filename": "step-2.png",
+        "prompt": "Photorealistic inspection scene of step-by-step hidden works verification before closure, inspector checking checklist items and physical details on site, realistic quality-control atmosphere, no text, no logo, no watermark."
+      }
+    },
+    {
+      "case_id": "two-week-planning",
+      "cover": {
+        "filename": "cover.png",
+        "prompt": "Photorealistic documentary planning scene for the next 7 to 14 days of work and materials on a power construction project, wall schedule or laptop plan, foreman and supply coordinator reviewing upcoming critical tasks, no text, no logo, no watermark."
+      },
+      "step_image": {
+        "step_no": 2,
+        "filename": "step-2.png",
+        "prompt": "Photorealistic project planning image focused on deficits and responsible owners for the next two weeks, team discussing missing materials and deadlines around a site planning board or laptop, realistic management context, no text, no logo, no watermark."
+      }
+    }
+  ]
+}

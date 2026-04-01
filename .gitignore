@@ -3,7 +3,10 @@ __pycache__/
 *.pyc
 .env
 *.tar.gz
+*.tar
 .tmp/
+tmp/
+output/
 logs/
 data/*.db
 data/*.sqlite

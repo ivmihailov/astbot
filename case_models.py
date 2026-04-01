@@ -52,6 +52,7 @@ class EventAction(str, Enum):
     HINT_REQUESTED = "hint_requested"
     COMMENT_REQUESTED = "comment_requested"
     PHOTO_REQUESTED = "photo_requested"
+    MEDIA_ADDED = "media_added"
     STEP_BACK = "step_back"
 
 
@@ -61,6 +62,13 @@ class SubmissionStatus(str, Enum):
     NEW = "new"
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class SubmissionMediaType(str, Enum):
+    """Тип медиа во входящей заявке."""
+
+    PHOTO = "photo"
+    VIDEO = "video"
 
 
 class ConversationScreen(str, Enum):
@@ -76,6 +84,7 @@ class ConversationScreen(str, Enum):
     AWAITING_SUBMISSION_ACTIONS = "awaiting_submission_actions"
     AWAITING_SUBMISSION_RESULT = "awaiting_submission_result"
     AWAITING_SUBMISSION_RECOMMENDATIONS = "awaiting_submission_recommendations"
+    AWAITING_SUBMISSION_MEDIA = "awaiting_submission_media"
 
 
 class CaseStep(BaseModel):
@@ -90,6 +99,7 @@ class CaseStep(BaseModel):
     confirmation_type: ConfirmationType = ConfirmationType.BUTTON
     help_text: str | None = None
     next_rule: str | None = None
+    media: list["SubmissionMedia"] = Field(default_factory=list)
 
 
 class Case(BaseModel):
@@ -110,6 +120,7 @@ class Case(BaseModel):
     estimated_time: str = "10-15 минут"
     is_popular: bool = False
     search_phrases: list[str] = Field(default_factory=list)
+    media: list["SubmissionMedia"] = Field(default_factory=list)
     steps: list[CaseStep] = Field(default_factory=list)
 
 
@@ -147,10 +158,35 @@ class CaseSubmission(BaseModel):
     actions_taken: str | None = None
     result: str | None = None
     recommendations: str | None = None
-    photos: list[str] = Field(default_factory=list)
+    media: list["SubmissionMedia"] = Field(default_factory=list)
     created_by: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
     moderation_status: SubmissionStatus = SubmissionStatus.NEW
+
+
+class SubmissionMedia(BaseModel):
+    """Медиа, приложенное к заявке на новый кейс."""
+
+    id: str
+    media_type: SubmissionMediaType
+    source_url: str | None = None
+    token: str | None = None
+    preview_url: str | None = None
+    storage_path: str | None = None
+    linked_step_nos: list[int] = Field(default_factory=list)
+    original_payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class IncomingMedia(BaseModel):
+    """Нормализованное входящее медиа из сообщения MAX."""
+
+    media_type: SubmissionMediaType
+    source_url: str | None = None
+    token: str | None = None
+    preview_url: str | None = None
+    linked_step_nos: list[int] = Field(default_factory=list)
+    original_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class SearchMatch(BaseModel):
@@ -171,3 +207,4 @@ class UserState(BaseModel):
     active_run: CaseRun | None = None
     run_events: list[CaseStepEvent] = Field(default_factory=list)
     draft_submission: CaseSubmission | None = None
+    awaiting_run_media_step_id: str | None = None

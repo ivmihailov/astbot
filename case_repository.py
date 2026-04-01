@@ -7,7 +7,20 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from case_models import Case, CaseStep, CaseType, ConfirmationType
+from case_models import (
+    Case,
+    CaseStatus,
+    CaseRun,
+    CaseStep,
+    CaseStepEvent,
+    CaseSubmission,
+    CaseType,
+    ConfirmationType,
+    EventAction,
+    RunStatus,
+    SubmissionMedia,
+    SubmissionMediaType,
+)
 
 
 def _step(
@@ -33,12 +46,12 @@ def _step(
 
 
 POPULAR_CASE_IDS = {
-    "flooded-trench",
     "cable-delivery-delay",
-    "as-built-mismatch",
-    "work-without-permit",
-    "damaged-equipment",
+    "concrete-mismatch",
+    "stale-docs",
 }
+
+STATIC_CASE_MEDIA_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
 
 
 SEED_CASES: list[Case] = [
@@ -647,12 +660,22 @@ class InMemoryCaseRepository:
 class SQLiteCaseRepository:
     """SQLite-репозиторий кейсов и стартовых таблиц пилота."""
 
-    def __init__(self, db_path: str, seed_cases: list[Case] | None = None) -> None:
+    def __init__(
+        self,
+        db_path: str,
+        media_dir: str,
+        seed_cases: list[Case] | None = None,
+    ) -> None:
         self.db_path = Path(db_path)
+        self.media_dir = Path(media_dir)
         self.seed_cases = seed_cases or SEED_CASES
+        self.static_case_media_dir = (
+            Path(__file__).resolve().parent / "assets" / "case_images"
+        )
 
     def initialize(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.media_dir.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(
                 """
@@ -721,9 +744,22 @@ class SQLiteCaseRepository:
                     created_at TEXT NOT NULL,
                     moderation_status TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS new_case_submission_media (
+                    id TEXT PRIMARY KEY,
+                    submission_id TEXT NOT NULL REFERENCES new_case_submissions(id) ON DELETE CASCADE,
+                    media_type TEXT NOT NULL,
+                    source_url TEXT,
+                    token TEXT,
+                    preview_url TEXT,
+                    storage_path TEXT,
+                    original_payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
             self._seed(conn)
+            self._sync_submission_cases(conn)
 
     def list_cases(self) -> list[Case]:
         with self._connect() as conn:
@@ -751,6 +787,14 @@ class SQLiteCaseRepository:
             return [self._load_case(conn, row["id"]) for row in rows]
 
     def get_case(self, case_id: str) -> Case | None:
+        if case_id.startswith("user-case-"):
+            submission_id = case_id.removeprefix("user-case-")
+            with self._connect() as conn:
+                submission = self._get_submission(conn, submission_id)
+                if submission is None:
+                    return None
+                return self._build_case_from_submission(submission)
+
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT id FROM cases WHERE id = ?",
@@ -760,98 +804,495 @@ class SQLiteCaseRepository:
                 return None
             return self._load_case(conn, case_id)
 
+    def save_submission(self, submission: CaseSubmission) -> CaseSubmission:
+        with self._connect() as conn:
+            media_storage_refs: list[str] = []
+            normalized_media: list[SubmissionMedia] = []
+
+            conn.execute(
+                """
+                INSERT INTO new_case_submissions (
+                    id,
+                    title,
+                    problem_description,
+                    actions_taken,
+                    result,
+                    recommendations,
+                    photos_json,
+                    created_by,
+                    created_at,
+                    moderation_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    problem_description = excluded.problem_description,
+                    actions_taken = excluded.actions_taken,
+                    result = excluded.result,
+                    recommendations = excluded.recommendations,
+                    photos_json = excluded.photos_json,
+                    created_by = excluded.created_by,
+                    created_at = excluded.created_at,
+                    moderation_status = excluded.moderation_status
+                """,
+                (
+                    submission.id,
+                    submission.title,
+                    submission.problem_description,
+                    submission.actions_taken,
+                    submission.result,
+                    submission.recommendations,
+                    "[]",
+                    submission.created_by,
+                    submission.created_at.isoformat(),
+                    submission.moderation_status.value,
+                ),
+            )
+
+            conn.execute(
+                "DELETE FROM new_case_submission_media WHERE submission_id = ?",
+                (submission.id,),
+            )
+
+            for media in submission.media:
+                persisted_media = self._persist_submission_media(submission.id, media)
+                media_storage_refs.append(persisted_media.storage_path or persisted_media.id)
+                normalized_media.append(persisted_media)
+                conn.execute(
+                    """
+                    INSERT INTO new_case_submission_media (
+                        id,
+                        submission_id,
+                        media_type,
+                        source_url,
+                        token,
+                        preview_url,
+                        storage_path,
+                        original_payload_json,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        persisted_media.id,
+                        submission.id,
+                        persisted_media.media_type.value,
+                        persisted_media.source_url,
+                        persisted_media.token,
+                        persisted_media.preview_url,
+                        persisted_media.storage_path,
+                        json.dumps(
+                            {
+                                **persisted_media.original_payload,
+                                "linked_step_nos": persisted_media.linked_step_nos,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        persisted_media.created_at.isoformat(),
+                    ),
+                )
+
+            conn.execute(
+                """
+                UPDATE new_case_submissions
+                SET photos_json = ?
+                WHERE id = ?
+                """,
+                (json.dumps(media_storage_refs, ensure_ascii=False), submission.id),
+            )
+            searchable_case = self._build_case_from_submission(
+                submission.model_copy(update={"media": normalized_media})
+            )
+            self._upsert_case(conn, searchable_case)
+            conn.commit()
+
+        return submission.model_copy(update={"media": normalized_media})
+
+    def create_run(self, run: CaseRun) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO case_runs (
+                    id,
+                    user_id,
+                    case_id,
+                    status,
+                    started_at,
+                    finished_at,
+                    current_step,
+                    summary_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run.id,
+                    run.user_id,
+                    run.case_id,
+                    run.status.value,
+                    run.started_at.isoformat(),
+                    run.finished_at.isoformat() if run.finished_at else None,
+                    run.current_step,
+                    json.dumps(run.summary_json, ensure_ascii=False),
+                ),
+            )
+            conn.commit()
+
+    def update_run(self, run: CaseRun) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE case_runs
+                SET status = ?,
+                    finished_at = ?,
+                    current_step = ?,
+                    summary_json = ?
+                WHERE id = ?
+                """,
+                (
+                    run.status.value,
+                    run.finished_at.isoformat() if run.finished_at else None,
+                    run.current_step,
+                    json.dumps(run.summary_json, ensure_ascii=False),
+                    run.id,
+                ),
+            )
+            conn.commit()
+
+    def add_run_event(self, event: CaseStepEvent) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO case_step_events (
+                    id,
+                    run_id,
+                    step_id,
+                    action,
+                    comment,
+                    photo_ids_json,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.id,
+                    event.run_id,
+                    event.step_id,
+                    event.action.value,
+                    event.comment,
+                    json.dumps(event.photo_ids, ensure_ascii=False),
+                    event.created_at.isoformat(),
+                ),
+            )
+            conn.commit()
+
+    def persist_run_media(
+        self,
+        run_id: str,
+        step_id: str,
+        media_items: list[SubmissionMedia],
+    ) -> list[SubmissionMedia]:
+        run_dir = self.media_dir / "runs" / run_id / step_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        persisted: list[SubmissionMedia] = []
+        for media in media_items:
+            suffix = (
+                ".video.json"
+                if media.media_type == SubmissionMediaType.VIDEO
+                else ".photo.json"
+            )
+            media_path = run_dir / f"{media.id}{suffix}"
+            media_dump = media.model_dump(mode="json")
+            media_dump["run_id"] = run_id
+            media_dump["step_id"] = step_id
+            media_path.write_text(
+                json.dumps(media_dump, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            persisted.append(media.model_copy(update={"storage_path": str(media_path)}))
+        return persisted
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _persist_submission_media(
+        self,
+        submission_id: str,
+        media: SubmissionMedia,
+    ) -> SubmissionMedia:
+        submission_dir = self.media_dir / "submissions" / submission_id
+        submission_dir.mkdir(parents=True, exist_ok=True)
+
+        suffix = ".video.json" if media.media_type == SubmissionMediaType.VIDEO else ".photo.json"
+        media_path = submission_dir / f"{media.id}{suffix}"
+        media_dump = media.model_dump(mode="json")
+        media_dump["submission_id"] = submission_id
+        media_path.write_text(
+            json.dumps(media_dump, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        return media.model_copy(update={"storage_path": str(media_path)})
 
     def _seed(self, conn: sqlite3.Connection) -> None:
         for seed_case in self.seed_cases:
             case = seed_case.model_copy(
                 update={"is_popular": seed_case.id in POPULAR_CASE_IDS}
             )
+            self._upsert_case(conn, case)
+        conn.commit()
+
+    def _sync_submission_cases(self, conn: sqlite3.Connection) -> None:
+        submission_rows = conn.execute(
+            """
+            SELECT *
+            FROM new_case_submissions
+            ORDER BY created_at ASC
+            """
+        ).fetchall()
+        for row in submission_rows:
+            media_rows = conn.execute(
+                """
+                SELECT *
+                FROM new_case_submission_media
+                WHERE submission_id = ?
+                ORDER BY created_at ASC
+                """,
+                (row["id"],),
+            ).fetchall()
+            submission = self._load_submission(row, media_rows)
+            self._upsert_case(conn, self._build_case_from_submission(submission))
+        conn.commit()
+
+    def _get_submission(
+        self,
+        conn: sqlite3.Connection,
+        submission_id: str,
+    ) -> CaseSubmission | None:
+        row = conn.execute(
+            "SELECT * FROM new_case_submissions WHERE id = ?",
+            (submission_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        media_rows = conn.execute(
+            """
+            SELECT *
+            FROM new_case_submission_media
+            WHERE submission_id = ?
+            ORDER BY created_at ASC
+            """,
+            (submission_id,),
+        ).fetchall()
+        return self._load_submission(row, media_rows)
+
+    def _upsert_case(self, conn: sqlite3.Connection, case: Case) -> None:
+        conn.execute(
+            """
+            INSERT INTO cases (
+                id,
+                title,
+                type,
+                area,
+                description,
+                consequences,
+                preconditions_json,
+                roles_json,
+                status,
+                version,
+                author,
+                updated_at,
+                estimated_time,
+                is_popular,
+                search_phrases_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                type = excluded.type,
+                area = excluded.area,
+                description = excluded.description,
+                consequences = excluded.consequences,
+                preconditions_json = excluded.preconditions_json,
+                roles_json = excluded.roles_json,
+                status = excluded.status,
+                version = excluded.version,
+                author = excluded.author,
+                updated_at = excluded.updated_at,
+                estimated_time = excluded.estimated_time,
+                is_popular = excluded.is_popular,
+                search_phrases_json = excluded.search_phrases_json
+            """,
+            (
+                case.id,
+                case.title,
+                case.type.value,
+                case.area,
+                case.description,
+                case.consequences,
+                json.dumps(case.preconditions, ensure_ascii=False),
+                json.dumps(case.roles, ensure_ascii=False),
+                case.status.value,
+                case.version,
+                case.author,
+                case.updated_at.isoformat(),
+                case.estimated_time,
+                int(case.is_popular),
+                json.dumps(case.search_phrases, ensure_ascii=False),
+            ),
+        )
+        for step in case.steps:
             conn.execute(
                 """
-                INSERT INTO cases (
+                INSERT INTO case_steps (
                     id,
-                    title,
-                    type,
-                    area,
-                    description,
-                    consequences,
-                    preconditions_json,
-                    roles_json,
-                    status,
-                    version,
-                    author,
-                    updated_at,
-                    estimated_time,
-                    is_popular,
-                    search_phrases_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    case_id,
+                    step_no,
+                    action_text,
+                    why_text,
+                    required,
+                    confirmation_type,
+                    help_text,
+                    next_rule
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
-                    title = excluded.title,
-                    type = excluded.type,
-                    area = excluded.area,
-                    description = excluded.description,
-                    consequences = excluded.consequences,
-                    preconditions_json = excluded.preconditions_json,
-                    roles_json = excluded.roles_json,
-                    status = excluded.status,
-                    version = excluded.version,
-                    author = excluded.author,
-                    updated_at = excluded.updated_at,
-                    estimated_time = excluded.estimated_time,
-                    is_popular = excluded.is_popular,
-                    search_phrases_json = excluded.search_phrases_json
+                    case_id = excluded.case_id,
+                    step_no = excluded.step_no,
+                    action_text = excluded.action_text,
+                    why_text = excluded.why_text,
+                    required = excluded.required,
+                    confirmation_type = excluded.confirmation_type,
+                    help_text = excluded.help_text,
+                    next_rule = excluded.next_rule
                 """,
                 (
-                    case.id,
-                    case.title,
-                    case.type.value,
-                    case.area,
-                    case.description,
-                    case.consequences,
-                    json.dumps(case.preconditions, ensure_ascii=False),
-                    json.dumps(case.roles, ensure_ascii=False),
-                    case.status.value,
-                    case.version,
-                    case.author,
-                    case.updated_at.isoformat(),
-                    case.estimated_time,
-                    int(case.is_popular),
-                    json.dumps(case.search_phrases, ensure_ascii=False),
+                    step.id,
+                    step.case_id,
+                    step.step_no,
+                    step.action_text,
+                    step.why_text,
+                    int(step.required),
+                    step.confirmation_type.value,
+                    step.help_text,
+                    step.next_rule,
                 ),
             )
-            conn.execute("DELETE FROM case_steps WHERE case_id = ?", (case.id,))
-            for step in case.steps:
-                conn.execute(
-                    """
-                    INSERT INTO case_steps (
-                        id,
-                        case_id,
-                        step_no,
-                        action_text,
-                        why_text,
-                        required,
-                        confirmation_type,
-                        help_text,
-                        next_rule
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        step.id,
-                        step.case_id,
-                        step.step_no,
-                        step.action_text,
-                        step.why_text,
-                        int(step.required),
-                        step.confirmation_type.value,
-                        step.help_text,
-                        step.next_rule,
-                    ),
-                )
-        conn.commit()
+
+    def _build_case_from_submission(self, submission: CaseSubmission) -> Case:
+        case_id = f"user-case-{submission.id}"
+        title = submission.title or "Пользовательский кейс"
+        description = submission.problem_description or "Описание не указано."
+        consequences = submission.result or "Результат пока не зафиксирован."
+
+        search_phrases = [
+            phrase
+            for phrase in {
+                submission.title,
+                submission.problem_description,
+                submission.actions_taken,
+                submission.result,
+                submission.recommendations,
+            }
+            if phrase
+        ]
+
+        step_media_map: dict[int, list[SubmissionMedia]] = {1: [], 2: [], 3: [], 4: []}
+        case_media: list[SubmissionMedia] = []
+        for media in submission.media:
+            if media.linked_step_nos:
+                for step_no in media.linked_step_nos:
+                    if step_no in step_media_map:
+                        step_media_map[step_no].append(media)
+            else:
+                case_media.append(media)
+
+        steps = [
+            CaseStep(
+                id=f"{case_id}-step-1",
+                case_id=case_id,
+                step_no=1,
+                action_text="Сверьте свою ситуацию с описанием исходной проблемы.",
+                why_text="Сначала нужно понять, действительно ли этот пользовательский кейс похож на ваш случай.",
+                help_text=submission.problem_description or "Описание проблемы не указано.",
+                media=step_media_map[1],
+            ),
+            CaseStep(
+                id=f"{case_id}-step-2",
+                case_id=case_id,
+                step_no=2,
+                action_text="Сравните свои действия с тем, что уже делали по этому кейсу.",
+                why_text="Этот блок показывает, какие фактические действия предпринимал автор кейса.",
+                help_text=submission.actions_taken or "Действия по кейсу не указаны.",
+                media=step_media_map[2],
+            ),
+            CaseStep(
+                id=f"{case_id}-step-3",
+                case_id=case_id,
+                step_no=3,
+                action_text="Оцените результат, который получился в исходном кейсе.",
+                why_text="Так видно, к чему привели действия автора и стоит ли повторять такой подход без изменений.",
+                help_text=submission.result or "Результат по кейсу не указан.",
+                media=step_media_map[3],
+            ),
+            CaseStep(
+                id=f"{case_id}-step-4",
+                case_id=case_id,
+                step_no=4,
+                action_text="Учтите рекомендации перед применением кейса на объекте.",
+                why_text="Финальный блок нужен, чтобы не потерять важные ограничения, советы и типовые ошибки.",
+                help_text=submission.recommendations or "Рекомендации для этого кейса не указаны.",
+                media=step_media_map[4],
+            ),
+        ]
+
+        return Case(
+            id=case_id,
+            title=title,
+            type=CaseType.PROBLEM,
+            area="Пользовательский кейс",
+            description=description,
+            consequences=consequences,
+            preconditions=["Создан пользователем через форму нового кейса"],
+            roles=["Автор заявки"],
+            status=CaseStatus.DRAFT,
+            version="user-1.0",
+            author=f"user:{submission.created_by or 'unknown'}",
+            updated_at=submission.created_at,
+            estimated_time="10-15 минут",
+            is_popular=False,
+            search_phrases=search_phrases,
+            media=case_media,
+            steps=steps,
+        )
+
+    def _load_submission(
+        self,
+        row: sqlite3.Row,
+        media_rows: list[sqlite3.Row],
+    ) -> CaseSubmission:
+        media = [
+            SubmissionMedia(
+                id=media_row["id"],
+                media_type=media_row["media_type"],
+                source_url=media_row["source_url"],
+                token=media_row["token"],
+                preview_url=media_row["preview_url"],
+                storage_path=media_row["storage_path"],
+                linked_step_nos=json.loads(media_row["original_payload_json"]).get("linked_step_nos", []),
+                original_payload=json.loads(media_row["original_payload_json"]),
+                created_at=datetime.fromisoformat(media_row["created_at"]),
+            )
+            for media_row in media_rows
+        ]
+        return CaseSubmission(
+            id=row["id"],
+            title=row["title"],
+            problem_description=row["problem_description"],
+            actions_taken=row["actions_taken"],
+            result=row["result"],
+            recommendations=row["recommendations"],
+            media=media,
+            created_by=row["created_by"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            moderation_status=row["moderation_status"],
+        )
 
     def _load_case(self, conn: sqlite3.Connection, case_id: str) -> Case:
         row = conn.execute(
@@ -886,7 +1327,7 @@ class SQLiteCaseRepository:
             for step_row in step_rows
         ]
 
-        return Case(
+        case = Case(
             id=row["id"],
             title=row["title"],
             type=row["type"],
@@ -904,3 +1345,62 @@ class SQLiteCaseRepository:
             search_phrases=json.loads(row["search_phrases_json"]),
             steps=steps,
         )
+        if not case.id.startswith("user-case-"):
+            case_media, step_media_map = self._load_static_case_media(case.id, case.steps)
+            case.media.extend(case_media)
+            for step in case.steps:
+                step.media.extend(step_media_map.get(step.step_no, []))
+        return case
+
+    def _load_static_case_media(
+        self,
+        case_id: str,
+        steps: list[CaseStep],
+    ) -> tuple[list[SubmissionMedia], dict[int, list[SubmissionMedia]]]:
+        case_dir = self.static_case_media_dir / case_id
+        step_media_map = {step.step_no: [] for step in steps}
+        if not case_dir.exists():
+            return [], step_media_map
+
+        case_media = self._collect_static_media(case_dir, "cover")
+        for step in steps:
+            step_media_map[step.step_no] = self._collect_static_media(
+                case_dir,
+                f"step-{step.step_no}",
+                linked_step_nos=[step.step_no],
+            )
+        return case_media, step_media_map
+
+    def _collect_static_media(
+        self,
+        case_dir: Path,
+        prefix: str,
+        *,
+        linked_step_nos: list[int] | None = None,
+    ) -> list[SubmissionMedia]:
+        media_files: list[Path] = []
+        for pattern in (f"{prefix}.*", f"{prefix}-*.*"):
+            for path in sorted(case_dir.glob(pattern)):
+                if (
+                    path.is_file()
+                    and path.suffix.lower() in STATIC_CASE_MEDIA_EXTENSIONS
+                ):
+                    media_files.append(path.resolve())
+
+        collected: list[SubmissionMedia] = []
+        seen_paths: set[str] = set()
+        for path in media_files:
+            normalized_path = str(path)
+            if normalized_path in seen_paths:
+                continue
+            seen_paths.add(normalized_path)
+            collected.append(
+                SubmissionMedia(
+                    id=f"static-{case_dir.name}-{path.stem}",
+                    media_type=SubmissionMediaType.PHOTO,
+                    storage_path=normalized_path,
+                    linked_step_nos=linked_step_nos or [],
+                    original_payload={"source": "static_case_media"},
+                )
+            )
+        return collected

@@ -9,6 +9,7 @@ from case_models import (
     CaseStepEvent,
     CaseSubmission,
     ConversationScreen,
+    SubmissionMedia,
     SearchMatch,
     UserState,
 )
@@ -19,7 +20,6 @@ class StateManager:
 
     def __init__(self) -> None:
         self._states: dict[int, UserState] = {}
-        self._submissions: list[CaseSubmission] = []
 
     def get_state(self, chat_id: int) -> UserState:
         if chat_id not in self._states:
@@ -66,6 +66,7 @@ class StateManager:
             case_id=case_id,
         )
         state.run_events = []
+        state.awaiting_run_media_step_id = None
         state.screen = ConversationScreen.IN_RUN
         return state.active_run
 
@@ -78,6 +79,7 @@ class StateManager:
             id=uuid4().hex,
             created_by=str(chat_id),
         )
+        state.awaiting_run_media_step_id = None
         state.screen = ConversationScreen.AWAITING_SUBMISSION_TITLE
         return state.draft_submission
 
@@ -87,10 +89,26 @@ class StateManager:
             return None
 
         submission = state.draft_submission
-        self._submissions.append(submission)
         state.draft_submission = None
+        state.awaiting_run_media_step_id = None
         state.screen = ConversationScreen.MAIN_MENU
         return submission
 
-    def list_submissions(self) -> list[CaseSubmission]:
-        return list(self._submissions)
+    def attach_submission_media(
+        self,
+        chat_id: int,
+        media_items: list[SubmissionMedia],
+    ) -> CaseSubmission | None:
+        state = self.get_state(chat_id)
+        if state.draft_submission is None:
+            return None
+
+        state.draft_submission.media.extend(media_items)
+        return state.draft_submission
+
+    def enable_run_media_mode(self, chat_id: int, step_id: str) -> None:
+        state = self.get_state(chat_id)
+        state.awaiting_run_media_step_id = step_id
+
+    def clear_run_media_mode(self, chat_id: int) -> None:
+        self.get_state(chat_id).awaiting_run_media_step_id = None

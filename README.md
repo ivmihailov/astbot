@@ -1,20 +1,24 @@
 # AST Bot
 
-`AST Bot` — бот для MAX, который помогает находить производственные кейсы в электроэнергетике, открывать карточку кейса и проходить шаги внутри диалога.
+`AST Bot` — бот для MAX, который помогает искать производственные кейсы, открывать карточки кейсов и проходить пошаговые сценарии внутри диалога.
 
-Текущая версия проекта использует новый доменный слой `case_*`, локальную SQLite-базу и стартовые кейсы для пилота.
+Текущий runtime работает на новом доменном слое `case_*`, использует SQLite для пилота и локальное файловое хранилище для медиа.
 
 ## Что уже работает
 
-- `/start` и `/help`
-- главное меню в MAX
-- поиск по свободному тексту
-- раздел «Популярные кейсы»
-- карточка кейса
-- базовое пошаговое прохождение
-- локальный каталог кейсов и шагов в SQLite
+- `/start` и главное меню
+- поиск по кейсам свободным текстом
+- раздел `Популярные кейсы`
+- карточка кейса с форматированием
+- пошаговое прохождение кейса
+- создание нового кейса
+- сохранение пользовательских кейсов в SQLite
+- прикрепление фото и видео
+- локальные изображения для стартовых кейсов из `assets/case_images`
 
-Старые файлы про закупки оставлены в репозитории как legacy-контур, но активный сценарий бота сейчас живет в:
+## Структура активного контура
+
+Основной код бота:
 
 - `bot.py`
 - `case_models.py`
@@ -24,122 +28,179 @@
 - `case_formatters.py`
 - `case_handlers.py`
 
-## Быстрый запуск
+Старые закупочные файлы оставлены как legacy-слой и не используются в текущем runtime.
 
-### 1. Клонировать репозиторий
+## Docker: локальный запуск
 
-```powershell
+Это основной способ запуска проекта.
+
+### Что установить
+
+Нужно:
+
+- `git`
+- `docker`
+- `docker compose`
+
+Для Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install -y git docker.io docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+```
+
+После добавления пользователя в группу Docker нужно перелогиниться.
+
+### Подготовка
+
+```bash
 git clone https://github.com/ivmihailov/astbot.git
 cd astbot
+cp .env.example .env
 ```
 
-### 2. Создать виртуальное окружение
-
-Если у вас установлен `py`:
-
-```powershell
-py -3 -m venv .venv
-```
-
-Если `py` недоступен, можно использовать `python`:
-
-```powershell
-python -m venv .venv
-```
-
-### 3. Активировать окружение
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-Если PowerShell блокирует выполнение скриптов:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-### 4. Установить зависимости
-
-```powershell
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-### 5. Создать `.env`
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Минимально нужен только:
+Минимально нужно заполнить только:
 
 - `MAX_BOT_TOKEN`
 
-Опционально, для следующего этапа интеграции с GigaChat:
-
-- `GIGACHAT_CREDENTIALS`
-- `GIGACHAT_SCOPE`
-- `GIGACHAT_PARSE_MODEL`
-- `GIGACHAT_ANSWER_MODEL`
-
-По умолчанию уже подходят:
+Остальные переменные можно оставить по умолчанию:
 
 - `SQLITE_PATH=data/cases.db`
 - `MEDIA_DIR=storage/photos`
 
-## Запуск
+### Сборка и запуск
 
-### Основной способ
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_bot.ps1
+```bash
+docker compose build astbot
+docker compose up -d astbot
+docker compose ps
+docker compose logs -f astbot
 ```
 
-Скрипт сам пытается найти Python в таком порядке:
+Остановка:
 
-1. `.venv\Scripts\python.exe`
-2. `py -3`
-3. системный `python.exe`
-
-### Запуск в отдельном окне
-
-```powershell
-.\start_bot.cmd
+```bash
+docker compose down
 ```
 
-### Проверка статуса и остановка
+## Docker: выгрузка образа на сервер
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\status_bot.ps1
-powershell -ExecutionPolicy Bypass -File .\stop_bot.ps1
+В проекте есть два сценария:
+
+- `docker-compose.yml` — локальная сборка и запуск
+- `docker-compose.server.yml` — запуск уже загруженного образа на сервере
+
+### 1. Собрать образ локально
+
+```bash
+docker compose build astbot
 ```
 
-## Данные и логи
+После сборки образ имеет тег:
 
-- база данных: `data/cases.db`
-- основной лог: `logs/bot.log`
-- stdout/stderr процесса: `logs/runtime.out`, `logs/runtime.err`
+```bash
+astbot:0.1.0
+```
 
-Каталог кейсов и шагов инициализируется автоматически при первом запуске.
+### 2. Сохранить образ в tar
 
-## Быстрая проверка
+```bash
+mkdir -p output/deploy
+docker save astbot:0.1.0 -o output/deploy/astbot-0.1.0.tar
+```
 
-После старта откройте бота в MAX и попробуйте:
+### 3. Передать на сервер
+
+Передайте на сервер:
+
+- `astbot-0.1.0.tar`
+- `.env`
+- `docker-compose.server.yml`
+
+Если сохраняли образ в `output/deploy`, передавайте файл `output/deploy/astbot-0.1.0.tar`.
+
+Если проект уже склонирован на сервере, достаточно передать только tar и `.env`.
+
+## Разворот на Linux-сервере через docker load
+
+На сервере:
+
+```bash
+mkdir -p /home/admin/astbot
+cd /home/admin/astbot
+```
+
+Положите туда:
+
+- `astbot-0.1.0.tar`
+- `.env`
+- `docker-compose.server.yml`
+
+Создайте каталоги под данные:
+
+```bash
+mkdir -p data logs storage
+```
+
+Загрузите образ:
+
+```bash
+docker load -i astbot-0.1.0.tar
+```
+
+Запустите контейнер:
+
+```bash
+docker compose -f docker-compose.server.yml up -d
+```
+
+Проверьте:
+
+```bash
+docker compose -f docker-compose.server.yml ps
+docker compose -f docker-compose.server.yml logs -f astbot
+```
+
+Остановка:
+
+```bash
+docker compose -f docker-compose.server.yml down
+```
+
+## Что хранится на хосте
+
+И локальный compose, и серверный compose монтируют данные на хост:
+
+- `./data -> /app/data`
+- `./logs -> /app/logs`
+- `./storage -> /app/storage`
+
+Там лежат:
+
+- SQLite-база
+- логи
+- локальные медиа
+
+## Что важно для стабильности
+
+- Бот работает через `long polling`, поэтому ему не нужен HTTP-порт.
+- Для MVP используется SQLite, поэтому держать нужно один экземпляр бота, а не несколько одновременно.
+- При старте контейнер сам создает `data`, `logs` и `storage/photos`, если их еще нет.
+- Логи пишутся и в stdout контейнера, и в `logs/bot.log`.
+
+## Быстрая проверка после старта
+
+Откройте бота в MAX и проверьте:
 
 1. `/start`
 2. `Популярные кейсы`
 3. `Найти кейс`
-4. запрос `траншея заливается водой`
-
-## Текущее состояние проекта
-
-- аудит и план перестройки: `docs/pilot_rebuild_plan.md`
-- фото, постоянная история прохождения, аналитика и нормализация запроса через GigaChat — следующие этапы
-- `.env`, логи и локальная SQLite-база не коммитятся в git
+4. запрос вроде `траншею затопило водой`
 
 ## Лицензия
 
 Проект распространяется под `PolyForm Noncommercial 1.0.0`.
 
-Это означает, что использовать код в некоммерческих целях можно по условиям лицензии, а коммерческое использование требует отдельного согласования с правообладателем.
+Коммерческое использование требует отдельного согласования с правообладателем.
